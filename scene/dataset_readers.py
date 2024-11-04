@@ -22,7 +22,7 @@ from pathlib import Path
 from plyfile import PlyData, PlyElement
 from utils.sh_utils import SH2RGB
 from scene.gaussian_model import BasicPointCloud
-import open3d as o3d
+# import open3d as o3d
 
 class CameraInfo(NamedTuple):
     uid: int
