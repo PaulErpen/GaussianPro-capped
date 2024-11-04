@@ -11,7 +11,7 @@
 
 import torch
 import numpy as np
-from utils.general_utils import inverse_sigmoid, get_expon_lr_func, build_rotation
+from utils.general_utils import get_top_k_indices, inverse_sigmoid, get_expon_lr_func, build_rotation
 from torch import nn
 import os
 from utils.system_utils import mkdir_p
@@ -346,7 +346,7 @@ class GaussianModel:
         self.denom = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
         self.max_radii2D = torch.zeros((self.get_xyz.shape[0]), device="cuda")
 
-    def densify_and_split(self, grads, grad_threshold, scene_extent, N=2):
+    def densify_and_split(self, grads, grad_threshold, scene_extent, mask_top, N=2):
         n_init_points = self.get_xyz.shape[0]
         # Extract points that satisfy the gradient condition
         padded_grad = torch.zeros((n_init_points), device="cuda")
@@ -354,6 +354,11 @@ class GaussianModel:
         selected_pts_mask = torch.where(padded_grad >= grad_threshold, True, False)
         selected_pts_mask = torch.logical_and(selected_pts_mask,
                                               torch.max(self.get_scaling, dim=1).values > self.percent_dense*scene_extent)
+        
+        padded_mask_top = torch.zeros((n_init_points), dtype=torch.bool, device='cuda')
+        padded_mask_top[:mask_top.shape[0]] = mask_top
+
+        selected_pts_mask = selected_pts_mask & mask_top
 
         stds = self.get_scaling[selected_pts_mask].repeat(N,1)
         means =torch.zeros((stds.size(0), 3),device="cuda")
@@ -371,11 +376,13 @@ class GaussianModel:
         prune_filter = torch.cat((selected_pts_mask, torch.zeros(N * selected_pts_mask.sum(), device="cuda", dtype=bool)))
         self.prune_points(prune_filter)
 
-    def densify_and_clone(self, grads, grad_threshold, scene_extent):
+    def densify_and_clone(self, grads, grad_threshold, scene_extent, mask_top):
         # Extract points that satisfy the gradient condition
         selected_pts_mask = torch.where(torch.norm(grads, dim=-1) >= grad_threshold, True, False)
         selected_pts_mask = torch.logical_and(selected_pts_mask,
                                               torch.max(self.get_scaling, dim=1).values <= self.percent_dense*scene_extent)
+        
+        selected_pts_mask = mask_top & selected_pts_mask
         
         new_xyz = self._xyz[selected_pts_mask]
         new_features_dc = self._features_dc[selected_pts_mask]
@@ -386,12 +393,18 @@ class GaussianModel:
 
         self.densification_postfix(new_xyz, new_features_dc, new_features_rest, new_opacities, new_scaling, new_rotation)
 
-    def densify_and_prune(self, max_grad, min_opacity, extent, max_screen_size):
+    def densify_and_prune(self, max_grad, min_opacity, extent, max_screen_size, num_max):
+        diff = num_max - self.get_xyz.shape[0]
+
         grads = self.xyz_gradient_accum / self.denom
         grads[grads.isnan()] = 0.0
 
-        self.densify_and_clone(grads, max_grad, extent)
-        self.densify_and_split(grads, max_grad, extent)
+        top_grads_index = get_top_k_indices(torch.norm(grads, dim=-1), diff)
+        mask_top = torch.zeros_like(torch.norm(grads, dim=-1), dtype=torch.bool)
+        mask_top[top_grads_index] = True
+
+        self.densify_and_clone(grads, max_grad, extent, mask_top)
+        self.densify_and_split(grads, max_grad, extent, mask_top=mask_top)
 
         prune_mask = (self.get_opacity < min_opacity).squeeze()
         if max_screen_size:
@@ -406,7 +419,9 @@ class GaussianModel:
         self.xyz_gradient_accum[update_filter] += torch.norm(viewspace_point_tensor.grad[update_filter,:2], dim=-1, keepdim=True)
         self.denom[update_filter] += 1
 
-    def densify_from_depth_propagation(self, viewpoint_cam, propagated_depth, filter_mask, gt_image):
+    def densify_from_depth_propagation(self, viewpoint_cam, propagated_depth, filter_mask, gt_image, num_max: int, error_image):
+        diff = num_max - self.get_xyz.shape[0]
+
         # inverse project pixels into 3D scenes
         K = viewpoint_cam.K
         cam2world = viewpoint_cam.world_view_transform.transpose(0, 1).inverse()
@@ -440,6 +455,19 @@ class GaussianModel:
         world_coordinates_3D_downsampled = world_coordinates_3D[::8, ::8]
         filter_mask_downsampled = filter_mask[::8, ::8]
         gt_image_downsampled = gt_image.permute(1, 2, 0)[::8, ::8]
+        
+        error_image_downsampled = error_image[::8, ::8]
+        error_image_downsampled_flat = error_image_downsampled.view(error_image_downsampled.shape[0] * error_image_downsampled.shape[1])
+        top_k_error_indices = get_top_k_indices(error_image_downsampled_flat, diff)
+        error_image_downsampled_flat[top_k_error_indices] = 1.0
+        error_image_downsampled_flat[~top_k_error_indices] = 0.0
+        topk_error_mask = error_image_downsampled_flat.view(error_image_downsampled.shape[0], error_image_downsampled.shape[1]).to(torch.bool)
+
+        assert topk_error_mask.sum() <= (num_max - self.get_xyz.shape[0]), f"Error, topk error mask exceeds number of leftover until cap {topk_error_mask.sum()} > {num_max - self.get_xyz.shape[0]}"
+
+        filter_mask_downsampled = filter_mask_downsampled & topk_error_mask
+
+        assert filter_mask_downsampled.sum() <= (num_max - self.get_xyz.shape[0]), f"Error, filter mask exceeds number of leftover until cap {filter_mask_downsampled.sum()} > {num_max - self.get_xyz.shape[0]}"
 
         world_coordinates_3D_downsampled = world_coordinates_3D_downsampled[filter_mask_downsampled]
         color_downsampled = gt_image_downsampled[filter_mask_downsampled]
@@ -474,3 +502,5 @@ class GaussianModel:
 
         #update gaussians
         self.densification_postfix(new_xyz, new_features_dc, new_features_rest, new_opacity, new_scaling, new_rotation)
+
+        assert self.get_xyz.shape[0] <= num_max, f"Error, number of gaussians exceeds cap right after propagation ({self.get_xyz.shape[0]})"

@@ -45,7 +45,7 @@ class Scene:
                                                           sky_seg=args.sky_seg, load_normal=args.load_normal, load_depth=args.load_depth)
         elif os.path.exists(os.path.join(args.source_path, "transforms_train.json")):
             print("Found transforms_train.json file, assuming Blender data set!")
-            scene_info = sceneLoadTypeCallbacks["Blender"](args.source_path, args.white_background, args.eval)
+            scene_info = sceneLoadTypeCallbacks["Blender"](args.source_path, args.white_background, args.eval, args.n_start_gaussians)
         else:
             assert False, "Could not recognize scene type!"
 

@@ -293,3 +293,9 @@ def load_pairs_relation(path):
                 num = num + 1
             
     return pairs_relation
+
+def get_top_k_indices(tensor, k):
+    if k > tensor.shape[-1]:
+        return torch.arange(tensor.shape[-1], device=tensor.device)
+    v, i = torch.topk(tensor, k, largest=True)
+    return i
