@@ -130,7 +130,7 @@ def safe_state(silent):
         def flush(self):
             old_f.flush()
 
-    sys.stdout = F(silent)
+    # sys.stdout = F(silent)
 
     random.seed(0)
     np.random.seed(0)
