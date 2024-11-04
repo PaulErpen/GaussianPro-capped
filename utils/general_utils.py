@@ -15,9 +15,8 @@ from datetime import datetime
 import numpy as np
 import random
 import cv2
-import matplotlib.pyplot as plt
-from matplotlib import cm
-import matplotlib as mpl
+# from matplotlib import cm
+# import matplotlib as mpl
 import struct
 import os
 
@@ -142,51 +141,53 @@ def vis_depth(depth, minmax=None, cmap=cv2.COLORMAP_JET, constant_max=120):
     """
     depth: (H, W)
     """
-    depthmap = np.nan_to_num(depth) # change nan to 0
-
-    # x_ = (255 - x)[:,:,None].repeat(3,axis=-1)
-
-    # x = x[]
-    # threshold
-    # constant_max = np.percentile(depthmap, 90)
-    depthmap_valid_count = (depthmap < 300).sum()
-    constant_max = np.percentile(depthmap[depthmap<300], 99) if depthmap_valid_count > 10 else 60
-    # constant_max = 1
-    # constant_min = 0
-    constant_min = np.percentile(depthmap, 1) if np.percentile(depthmap, 1) < constant_max else 0
-    normalizer = mpl.colors.Normalize(vmin=constant_min, vmax=constant_max)
-    mapper = cm.ScalarMappable(norm=normalizer, cmap='magma_r')
-    depth_vis_color = (mapper.to_rgba(depthmap)[:, :, :3] * 255).astype(np.uint8)
-    # all_white = np.ones_like(x_) * 255
-    # x_ = x_ * (1-bg_mask)[:,:,None] + all_white * bg_mask[:,:,None]
-    # x_ = x_.astype(np.uint8)
-    # x_ = cv2.cvtColor(x_, cv2.COLOR_BGR2RGB)
-    return depth_vis_color, [np.percentile(depthmap, 0), np.percentile(depthmap, 99)]
+    raise NotImplementedError()
+    # depthmap = np.nan_to_num(depth) # change nan to 0
+# 
+    # # x_ = (255 - x)[:,:,None].repeat(3,axis=-1)
+# 
+    # # x = x[]
+    # # threshold
+    # # constant_max = np.percentile(depthmap, 90)
+    # depthmap_valid_count = (depthmap < 300).sum()
+    # constant_max = np.percentile(depthmap[depthmap<300], 99) if depthmap_valid_count > 10 else 60
+    # # constant_max = 1
+    # # constant_min = 0
+    # constant_min = np.percentile(depthmap, 1) if np.percentile(depthmap, 1) < constant_max else 0
+    # normalizer = mpl.colors.Normalize(vmin=constant_min, vmax=constant_max)
+    # mapper = cm.ScalarMappable(norm=normalizer, cmap='magma_r')
+    # depth_vis_color = (mapper.to_rgba(depthmap)[:, :, :3] * 255).astype(np.uint8)
+    # # all_white = np.ones_like(x_) * 255
+    # # x_ = x_ * (1-bg_mask)[:,:,None] + all_white * bg_mask[:,:,None]
+    # # x_ = x_.astype(np.uint8)
+    # # x_ = cv2.cvtColor(x_, cv2.COLOR_BGR2RGB)
+    # return depth_vis_color, [np.percentile(depthmap, 0), np.percentile(depthmap, 99)]
 
 def vis_depth1(depth, minmax=None, cmap=cv2.COLORMAP_JET, constant_max=120):
     """
     depth: (H, W)
     """
-    depthmap = np.nan_to_num(depth) # change nan to 0
-
-    # x_ = (255 - x)[:,:,None].repeat(3,axis=-1)
-
-    # x = x[]
-    # threshold
-    # constant_max = np.percentile(depthmap, 90)
-    depthmap_valid_count = (depthmap < 300).sum()
-    # constant_max = np.percentile(depthmap[depthmap<300], 99) if depthmap_valid_count > 10 else 60
-    constant_max = 10
-    constant_min = 0.5
-    # constant_min = np.percentile(depthmap, 1) if np.percentile(depthmap, 1) < constant_max else 0
-    normalizer = mpl.colors.Normalize(vmin=constant_min, vmax=constant_max)
-    mapper = cm.ScalarMappable(norm=normalizer, cmap='magma_r')
-    depth_vis_color = (mapper.to_rgba(depthmap)[:, :, :3] * 255).astype(np.uint8)
-    # all_white = np.ones_like(x_) * 255
-    # x_ = x_ * (1-bg_mask)[:,:,None] + all_white * bg_mask[:,:,None]
-    # x_ = x_.astype(np.uint8)
-    # x_ = cv2.cvtColor(x_, cv2.COLOR_BGR2RGB)
-    return depth_vis_color, [np.percentile(depthmap, 0), np.percentile(depthmap, 99)]
+    raise NotImplementedError()
+    # depthmap = np.nan_to_num(depth) # change nan to 0
+# 
+    # # x_ = (255 - x)[:,:,None].repeat(3,axis=-1)
+# 
+    # # x = x[]
+    # # threshold
+    # # constant_max = np.percentile(depthmap, 90)
+    # depthmap_valid_count = (depthmap < 300).sum()
+    # # constant_max = np.percentile(depthmap[depthmap<300], 99) if depthmap_valid_count > 10 else 60
+    # constant_max = 10
+    # constant_min = 0.5
+    # # constant_min = np.percentile(depthmap, 1) if np.percentile(depthmap, 1) < constant_max else 0
+    # normalizer = mpl.colors.Normalize(vmin=constant_min, vmax=constant_max)
+    # mapper = cm.ScalarMappable(norm=normalizer, cmap='magma_r')
+    # depth_vis_color = (mapper.to_rgba(depthmap)[:, :, :3] * 255).astype(np.uint8)
+    # # all_white = np.ones_like(x_) * 255
+    # # x_ = x_ * (1-bg_mask)[:,:,None] + all_white * bg_mask[:,:,None]
+    # # x_ = x_.astype(np.uint8)
+    # # x_ = cv2.cvtColor(x_, cv2.COLOR_BGR2RGB)
+    # return depth_vis_color, [np.percentile(depthmap, 0), np.percentile(depthmap, 99)]
 
 def readDepthDmb(file_path):
     inimage = open(file_path, "rb")
