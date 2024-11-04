@@ -358,7 +358,7 @@ class GaussianModel:
         padded_mask_top = torch.zeros((n_init_points), dtype=torch.bool, device='cuda')
         padded_mask_top[:mask_top.shape[0]] = mask_top
 
-        selected_pts_mask = selected_pts_mask & mask_top
+        selected_pts_mask = selected_pts_mask & padded_mask_top
 
         stds = self.get_scaling[selected_pts_mask].repeat(N,1)
         means =torch.zeros((stds.size(0), 3),device="cuda")
