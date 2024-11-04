@@ -249,13 +249,13 @@ def readCamerasFromTransforms(path, transformsfile, white_background, extension=
 
             sky_mask = np.ones_like(image)[:, :, 0].astype(np.uint8)
 
-            if is_train:
-                normal_path = image_path.replace("train", "normals")[:-4]+".npy"
-                normal = np.load(normal_path).astype(np.float32)
-                normal = (normal - 0.5) * 2.0
-                # normal[2, :, :] *= -1
-            else:
-                normal = np.zeros_like(image).transpose(2, 0, 1)
+            # if is_train:
+            #     normal_path = image_path.replace("train", "normals")[:-4]+".npy"
+            #     normal = np.load(normal_path).astype(np.float32)
+            #     normal = (normal - 0.5) * 2.0
+            #     # normal[2, :, :] *= -1
+            # else:
+            normal = None
 
             fovy = focal2fov(fov2focal(fovx, image.size[0]), image.size[1])
             FovY = fovy 
