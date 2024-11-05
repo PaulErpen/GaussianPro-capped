@@ -34,12 +34,21 @@ try:
 except ImportError:
     TENSORBOARD_FOUND = False
 
+try:
+    import wandb
+    WANDB_FOUND = True
+except ImportError:
+    WANDB_FOUND = False
+
 
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from):
     first_iter = 0
     tb_writer = prepare_output_and_logger(dataset)
     gaussians = GaussianModel(dataset.sh_degree)
     scene = Scene(dataset, gaussians)
+
+    cum_deleted = 0
+    cum_created = 0
     
     #read the overlapping txt
     if opt.dataset == '360' and opt.depth_loss:
@@ -205,10 +214,14 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 error_image = abs_rel_error.copy()
                 error_image[~propagated_mask.to(torch.bool)] = 0.0
 
+                n_before = gaussians.get_xyz.shape[0]
+
                 if propagated_mask.sum() > 100:
                     gaussians.densify_from_depth_propagation(viewpoint_cam, propagated_depth, propagated_mask.to(torch.bool), gt_image, args.num_max, error_image)
                 else:
                     print(f"Iter {iteration}: Not enough propagation candidates error! ({propagated_mask.sum()})")
+
+                cum_created = cum_created + (gaussians.get_xyz.shape[0] - n_before)
                 
         # Render
         if (iteration - 1) == debug_from:
@@ -282,6 +295,16 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             if (iteration in saving_iterations):
                 print("\n[ITER {}] Saving Gaussians".format(iteration))
                 scene.save(iteration)
+            
+            if WANDB_FOUND:
+                wandb.log({
+                    "train/psnr": psnr(image, gt_image).mean().double(),
+                    "train/ssim": ssim(image, gt_image).mean().double(),
+                    # "train/lpips": lpips(image, gt_image).mean().double(),
+                }, step=iteration)
+
+            n_deleted = 0
+            n_created = 0
 
             # Densification
             if iteration < opt.densify_until_iter:
@@ -291,10 +314,18 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
                 if iteration > opt.densify_from_iter and iteration % opt.densification_interval == 0:
                     size_threshold = 20 if iteration > opt.opacity_reset_interval else None
-                    gaussians.densify_and_prune(opt.densify_grad_threshold, 0.005, scene.cameras_extent, size_threshold, args.num_max)
+                    n_created, n_deleted = gaussians.densify_and_prune(opt.densify_grad_threshold, 0.005, scene.cameras_extent, size_threshold, args.num_max)
                 
                 if iteration % opt.opacity_reset_interval == 0 or (dataset.white_background and iteration == opt.densify_from_iter):
                     gaussians.reset_opacity()
+
+            if WANDB_FOUND:
+                cum_deleted = cum_deleted + n_deleted
+                cum_created = cum_created + n_created
+                wandb.log({
+                    "cum_deleted": cum_deleted,
+                    "cum_created": cum_created,
+                }, step=iteration)
 
             # Optimizer step
             if iteration < opt.iterations:
@@ -334,6 +365,11 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
         tb_writer.add_scalar('train_loss_patches/l1_loss', Ll1.item(), iteration)
         tb_writer.add_scalar('train_loss_patches/total_loss', loss.item(), iteration)
         tb_writer.add_scalar('iter_time', elapsed, iteration)
+    
+    if WANDB_FOUND:
+        wandb.log({
+            "n_gaussians": scene.gaussians.get_xyz.shape[0],
+        }, step=iteration)
 
     # Report test and samples of training set
     if iteration in testing_iterations:
@@ -345,6 +381,7 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
             if config['cameras'] and len(config['cameras']) > 0:
                 l1_test = 0.0
                 psnr_test = 0.0
+                ssims = []
                 for idx, viewpoint in enumerate(config['cameras']):
                     image = torch.clamp(renderFunc(viewpoint, scene.gaussians, *renderArgs)["render"], 0.0, 1.0)
                     gt_image = torch.clamp(viewpoint.original_image.to("cuda"), 0.0, 1.0)
@@ -354,12 +391,23 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
                             tb_writer.add_images(config['name'] + "_view_{}/ground_truth".format(viewpoint.image_name), gt_image[None], global_step=iteration)
                     l1_test += l1_loss(image, gt_image).mean().double()
                     psnr_test += psnr(image, gt_image).mean().double()
+                    ssims.append(ssim(image, gt_image))
+
                 psnr_test /= len(config['cameras'])
-                l1_test /= len(config['cameras'])          
+                l1_test /= len(config['cameras'])
+                ssims_test=torch.tensor(ssims).mean()
+
                 print("\n[ITER {}] Evaluating {}: L1 {} PSNR {}".format(iteration, config['name'], l1_test, psnr_test))
                 if tb_writer:
                     tb_writer.add_scalar(config['name'] + '/loss_viewpoint - l1_loss', l1_test, iteration)
                     tb_writer.add_scalar(config['name'] + '/loss_viewpoint - psnr', psnr_test, iteration)
+                
+                if WANDB_FOUND:
+                    wandb.log({
+                        f'{config['name']}/psnr': psnr_test,
+                        f'{config['name']}/ssim': ssims_test,
+                        # 'test/lpips': lpipss_test,
+                    }, step=iteration)
 
         if tb_writer:
             tb_writer.add_histogram("scene/opacity_histogram", scene.gaussians.get_opacity, iteration)
