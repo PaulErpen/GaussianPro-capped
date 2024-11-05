@@ -380,7 +380,6 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
         ]
 
         for config in validation_configs:
-            print(f"\n{len(config['cameras'])} Cameras in config {config['name']}")
             if config['cameras'] and len(config['cameras']) > 0:
                 l1_test = 0.0
                 psnr_test = 0.0
