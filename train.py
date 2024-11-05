@@ -414,6 +414,23 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
             tb_writer.add_scalar('total_points', scene.gaussians.get_xyz.shape[0], iteration)
         torch.cuda.empty_cache()
 
+def init_wandb(wandb_key: str, wandb_project: str, wandb_run_name: str, model_path: str, args):
+    if WANDB_FOUND:
+        wandb.login(key=wandb_key)
+        id = hashlib.md5(wandb_run_name.encode('utf-8')).hexdigest()
+        wandb_run = wandb.init(
+            project=wandb_project,
+            name=wandb_run_name,
+            config=args,
+            dir=model_path,
+            mode="online",
+            id=id,
+            resume=True
+        )
+        return wandb_run
+    else:
+        return None
+
 if __name__ == "__main__":
     # Set up command line argument parser
     parser = ArgumentParser(description="Training script parameters")
@@ -430,17 +447,26 @@ if __name__ == "__main__":
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default = None)
     parser.add_argument("--num_max", type=int, default = 12000, help="Maximum number of splats in the scene")
+
+    parser.add_argument("--wandb_key", type=str, default="", help="The key used to sign into weights & biases logging")
+    parser.add_argument("--wandb_project", type=str, default="")
+    parser.add_argument("--wandb_run_name", type=str, default=None)
     
     args = parser.parse_args(sys.argv[1:])
     args.save_iterations.append(args.iterations)
-    
-    print("Optimizing " + args.model_path)
 
-    # Initialize system state (RNG)
-    safe_state(args.quiet)
+    wand_run = init_wandb(args.wandb_key, args.wandb_project, args.wandb_run_name, args.model_path, args)
 
-    torch.autograd.set_detect_anomaly(args.detect_anomaly)
-    training(lp.extract(args), op.extract(args), pp.extract(args), args.test_iterations, args.save_iterations, args.checkpoint_iterations, args.start_checkpoint, args.debug_from)
+    try:
+        print("Optimizing " + args.model_path)
 
-    # All done
-    print("\nTraining complete.")
+        # Initialize system state (RNG)
+        safe_state(args.quiet)
+
+        torch.autograd.set_detect_anomaly(args.detect_anomaly)
+        training(lp.extract(args), op.extract(args), pp.extract(args), args.test_iterations, args.save_iterations, args.checkpoint_iterations, args.start_checkpoint, args.debug_from)
+
+        # All done
+        print("\nTraining complete.")
+    except:
+        wand_run.finish()
