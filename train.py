@@ -417,6 +417,7 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
 def init_wandb(wandb_key: str, wandb_project: str, wandb_run_name: str, model_path: str, args):
     if WANDB_FOUND:
         wandb.login(key=wandb_key)
+        import hashlib
         id = hashlib.md5(wandb_run_name.encode('utf-8')).hexdigest()
         wandb_run = wandb.init(
             project=wandb_project,
